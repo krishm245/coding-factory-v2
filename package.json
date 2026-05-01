@@ -1,0 +1,30 @@
+{
+  "name": "coding-factory",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CLI for orchestrating coding agents against GitHub issues.",
+  "type": "module",
+  "bin": {
+    "coding-factory": "./dist/cli.js"
+  },
+  "packageManager": "pnpm@10.0.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^7.5.1",
+    "commander": "^13.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}
