@@ -1,4 +1,9 @@
-import { access, mkdir, readdir, writeFile } from "node:fs/promises";
+import {
+  access as fsAccess,
+  mkdir as fsMkdir,
+  readdir as fsReaddir,
+  writeFile as fsWriteFile
+} from "node:fs/promises";
 import type { Writable } from "node:stream";
 import { buildConfig, getCodingFactoryPaths, serializeConfig, type AgentName } from "../lib/config.js";
 import { buildDockerfile } from "../lib/dockerfile.js";
@@ -9,16 +14,24 @@ export interface InitPrompts {
   confirmOverwrite(configDirectory: string): Promise<boolean>;
 }
 
+export interface InitFileSystem {
+  access(path: string): Promise<void>;
+  mkdir(path: string, options: { recursive: true }): Promise<string | undefined>;
+  readdir(path: string): Promise<string[]>;
+  writeFile(path: string, data: string, encoding: "utf8"): Promise<void>;
+}
+
 export interface InitializeProjectOptions {
   cwd: string;
   prompts: InitPrompts;
   stdout: Pick<Writable, "write">;
+  fileSystem?: InitFileSystem;
 }
 
 export async function initializeProject(options: InitializeProjectOptions): Promise<void> {
-  const { cwd, prompts, stdout } = options;
+  const { cwd, prompts, stdout, fileSystem = nodeFileSystem } = options;
   const paths = getCodingFactoryPaths(cwd);
-  const configDirectoryExists = await directoryExists(paths.configDirectory);
+  const configDirectoryExists = await directoryExists(paths.configDirectory, fileSystem);
 
   if (configDirectoryExists) {
     const shouldOverwrite = await prompts.confirmOverwrite(paths.configDirectory);
@@ -36,19 +49,30 @@ export async function initializeProject(options: InitializeProjectOptions): Prom
     throw new Error("Test command cannot be empty.");
   }
 
-  await mkdir(paths.configDirectory, { recursive: true });
-  await writeFile(paths.envPath, buildEnvTemplate(agent), "utf8");
-  await writeFile(paths.configPath, serializeConfig(buildConfig(cwd, { agent, testCommand })), "utf8");
-  await writeFile(paths.dockerfilePath, buildDockerfile(agent), "utf8");
+  await fileSystem.mkdir(paths.configDirectory, { recursive: true });
+  await fileSystem.writeFile(paths.envPath, buildEnvTemplate(agent), "utf8");
+  await fileSystem.writeFile(
+    paths.configPath,
+    serializeConfig(buildConfig(cwd, { agent, testCommand })),
+    "utf8"
+  );
+  await fileSystem.writeFile(paths.dockerfilePath, buildDockerfile(agent), "utf8");
 
   stdout.write(`Created ${paths.configDirectory}\n`);
   stdout.write(`Update ${paths.envPath} with your secrets before running issue orchestration.\n`);
 }
 
-async function directoryExists(directoryPath: string): Promise<boolean> {
+const nodeFileSystem: InitFileSystem = {
+  access: fsAccess,
+  mkdir: fsMkdir,
+  readdir: fsReaddir,
+  writeFile: fsWriteFile
+};
+
+async function directoryExists(directoryPath: string, fileSystem: InitFileSystem): Promise<boolean> {
   try {
-    await access(directoryPath);
-    await readdir(directoryPath);
+    await fileSystem.access(directoryPath);
+    await fileSystem.readdir(directoryPath);
     return true;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
