@@ -1,31 +1,25 @@
 import type { Writable } from "node:stream";
-import { readConfig, type CodingFactoryConfig } from "../lib/config.js";
+import { IssueOrchestrator } from "../lib/issue-orchestrator.js";
 
-export type ReadConfig = (cwd: string) => Promise<CodingFactoryConfig | null>;
-
-export interface RunIssueCommandOptions {
-  cwd: string;
-  issueNumber: string;
-  stdout: Pick<Writable, "write">;
-  readConfig?: ReadConfig;
+export interface IssueCommandDependencies {
+  getCwd?: () => string;
+  issueOrchestrator?: Pick<IssueOrchestrator, "run">;
+  stdout?: Pick<Writable, "write">;
 }
 
-export async function runIssueCommand(options: RunIssueCommandOptions): Promise<void> {
-  const { cwd, issueNumber, stdout, readConfig: injectedReadConfig = readConfig } = options;
-  const parsedIssueNumber = Number.parseInt(issueNumber, 10);
+export class IssueCommand {
+  constructor(private readonly dependencies: IssueCommandDependencies = {}) {}
 
-  if (!Number.isInteger(parsedIssueNumber) || parsedIssueNumber <= 0) {
-    throw new Error("Issue number must be a positive integer.");
+  async run(issueNumber: string): Promise<void> {
+    const cwd = (this.dependencies.getCwd ?? process.cwd)();
+    const issueOrchestrator =
+      this.dependencies.issueOrchestrator ?? new IssueOrchestrator();
+    const stdout = this.dependencies.stdout ?? process.stdout;
+    const result = await issueOrchestrator.run({ cwd, issueNumber });
+
+    stdout.write(
+      `Issue orchestration for #${result.issueNumber} is not implemented yet. ` +
+        `Current default agent: ${result.config.defaultAgent}.\n`
+    );
   }
-
-  const config = await injectedReadConfig(cwd);
-
-  if (!config) {
-    throw new Error("Project is not initialized. Run `coding-factory init` first.");
-  }
-
-  stdout.write(
-    `Issue orchestration for #${parsedIssueNumber} is not implemented yet. ` +
-      `Current default agent: ${config.defaultAgent}.\n`
-  );
 }

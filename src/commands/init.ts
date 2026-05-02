@@ -1,12 +1,7 @@
-import {
-  access as fsAccess,
-  mkdir as fsMkdir,
-  readdir as fsReaddir,
-  writeFile as fsWriteFile
-} from "node:fs/promises";
+import { confirm, input, select } from "@inquirer/prompts";
 import type { Writable } from "node:stream";
-import { buildConfig, getCodingFactoryPaths, serializeConfig, type AgentName } from "../lib/config.js";
-import { buildDockerfile } from "../lib/dockerfile.js";
+import { type AgentName } from "../lib/agent-runtime.js";
+import { ProjectInitializer } from "../lib/project-initializer.js";
 
 export interface InitPrompts {
   chooseAgent(): Promise<AgentName>;
@@ -14,87 +9,66 @@ export interface InitPrompts {
   confirmOverwrite(configDirectory: string): Promise<boolean>;
 }
 
-export interface InitFileSystem {
-  access(path: string): Promise<void>;
-  mkdir(path: string, options: { recursive: true }): Promise<string | undefined>;
-  readdir(path: string): Promise<string[]>;
-  writeFile(path: string, data: string, encoding: "utf8"): Promise<void>;
+export interface InitCommandDependencies {
+  getCwd?: () => string;
+  projectInitializer?: Pick<ProjectInitializer, "initialize" | "inspect">;
+  prompts?: InitPrompts;
+  stdout?: Pick<Writable, "write">;
 }
 
-export interface InitializeProjectOptions {
-  cwd: string;
-  prompts: InitPrompts;
-  stdout: Pick<Writable, "write">;
-  fileSystem?: InitFileSystem;
-}
+export class InitCommand {
+  constructor(private readonly dependencies: InitCommandDependencies = {}) {}
 
-export async function initializeProject(options: InitializeProjectOptions): Promise<void> {
-  const { cwd, prompts, stdout, fileSystem = nodeFileSystem } = options;
-  const paths = getCodingFactoryPaths(cwd);
-  const configDirectoryExists = await directoryExists(paths.configDirectory, fileSystem);
+  async run(): Promise<void> {
+    const cwd = (this.dependencies.getCwd ?? process.cwd)();
+    const projectInitializer =
+      this.dependencies.projectInitializer ?? new ProjectInitializer();
+    const prompts = this.dependencies.prompts ?? defaultPrompts;
+    const stdout = this.dependencies.stdout ?? process.stdout;
+    const inspection = await projectInitializer.inspect(cwd);
 
-  if (configDirectoryExists) {
-    const shouldOverwrite = await prompts.confirmOverwrite(paths.configDirectory);
+    if (inspection.exists) {
+      const shouldOverwrite = await prompts.confirmOverwrite(
+        inspection.paths.configDirectory
+      );
 
-    if (!shouldOverwrite) {
-      stdout.write("Initialization cancelled.\n");
-      return;
+      if (!shouldOverwrite) {
+        stdout.write("Initialization cancelled.\n");
+        return;
+      }
     }
+
+    const defaultAgent = await prompts.chooseAgent();
+    const testCommand = await prompts.enterTestCommand();
+    const result = await projectInitializer.initialize({
+      cwd,
+      defaultAgent,
+      testCommand
+    });
+
+    stdout.write(`Created ${result.paths.configDirectory}\n`);
+    stdout.write(
+      `Update ${result.paths.envPath} with your secrets before running issue orchestration.\n`
+    );
   }
-
-  const agent = await prompts.chooseAgent();
-  const testCommand = await prompts.enterTestCommand();
-
-  if (!testCommand.trim()) {
-    throw new Error("Test command cannot be empty.");
-  }
-
-  await fileSystem.mkdir(paths.configDirectory, { recursive: true });
-  await fileSystem.writeFile(paths.envPath, buildEnvTemplate(agent), "utf8");
-  await fileSystem.writeFile(
-    paths.configPath,
-    serializeConfig(buildConfig(cwd, { agent, testCommand })),
-    "utf8"
-  );
-  await fileSystem.writeFile(paths.dockerfilePath, buildDockerfile(agent), "utf8");
-
-  stdout.write(`Created ${paths.configDirectory}\n`);
-  stdout.write(`Update ${paths.envPath} with your secrets before running issue orchestration.\n`);
 }
 
-const nodeFileSystem: InitFileSystem = {
-  access: fsAccess,
-  mkdir: fsMkdir,
-  readdir: fsReaddir,
-  writeFile: fsWriteFile
+const defaultPrompts: InitPrompts = {
+  chooseAgent: () =>
+    select<AgentName>({
+      message: "Choose the default agent",
+      choices: [
+        { name: "Codex", value: "codex" },
+        { name: "Claude", value: "claude" }
+      ]
+    }),
+  confirmOverwrite: (configDirectory: string) =>
+    confirm({
+      message: `${configDirectory} already exists. Overwrite managed files?`,
+      default: false
+    }),
+  enterTestCommand: () =>
+    input({
+      message: "Enter the command used to run tests in this repository"
+    })
 };
-
-async function directoryExists(directoryPath: string, fileSystem: InitFileSystem): Promise<boolean> {
-  try {
-    await fileSystem.access(directoryPath);
-    await fileSystem.readdir(directoryPath);
-    return true;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return false;
-    }
-
-    throw error;
-  }
-}
-
-function buildEnvTemplate(agent: AgentName): string {
-  const lines = [
-    "# Fill in these values before running `coding-factory issue <number>`."
-  ];
-
-  if (agent === "codex") {
-    lines.push("OPENAI_API_KEY=");
-  } else {
-    lines.push("ANTHROPIC_API_KEY=");
-  }
-
-  lines.push("GITHUB_TOKEN=");
-
-  return `${lines.join("\n")}\n`;
-}

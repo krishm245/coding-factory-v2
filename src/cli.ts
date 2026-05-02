@@ -1,129 +1,60 @@
 #!/usr/bin/env node
 
 import { fileURLToPath } from "node:url";
-import { confirm, input, select } from "@inquirer/prompts";
 import { Command } from "commander";
 import type { Command as CommandInstance } from "commander";
-import {
-  initializeProject,
-  type InitFileSystem,
-  type InitPrompts
-} from "./commands/init.js";
-import { runIssueCommand, type ReadConfig } from "./commands/issue.js";
-import type { AgentName } from "./lib/config.js";
+import { InitCommand } from "./commands/init.js";
+import { IssueCommand } from "./commands/issue.js";
 
 export interface CliDependencies {
-  chooseAgent?: InitPrompts["chooseAgent"];
-  confirmOverwrite?: InitPrompts["confirmOverwrite"];
-  enterTestCommand?: InitPrompts["enterTestCommand"];
-  getCwd?: () => string;
-  initFileSystem?: InitFileSystem;
-  readConfig?: ReadConfig;
+  initCommand?: Pick<InitCommand, "run">;
+  issueCommand?: Pick<IssueCommand, "run">;
   stderr?: Pick<NodeJS.WritableStream, "write">;
-  stdout?: Pick<NodeJS.WritableStream, "write">;
 }
 
 export function createProgram(dependencies: CliDependencies = {}): Command {
   const program = new Command();
+  const initCommand = dependencies.initCommand ?? new InitCommand();
+  const issueCommand = dependencies.issueCommand ?? new IssueCommand();
 
   program
     .name("coding-factory")
     .description("Orchestrate coding agents against GitHub issues.")
     .version("0.1.0");
 
-  registerInitCommand(program, dependencies);
-  registerIssueCommand(program, dependencies);
+  registerInitCommand(program, initCommand);
+  registerIssueCommand(program, issueCommand);
 
   return program;
 }
 
 export function registerInitCommand(
   program: CommandInstance,
-  dependencies: CliDependencies = {}
+  initCommand: Pick<InitCommand, "run">
 ): CommandInstance {
   program
     .command("init")
     .description("Initialize coding-factory in the current repository.")
-    .action(async () => {
-      const chooseAgent = dependencies.chooseAgent ?? defaultChooseAgent;
-      const confirmOverwrite = dependencies.confirmOverwrite ?? defaultConfirmOverwrite;
-      const enterTestCommand = dependencies.enterTestCommand ?? defaultEnterTestCommand;
-      const getCwd = dependencies.getCwd ?? process.cwd;
-      const stdout = dependencies.stdout ?? process.stdout;
-
-      const initOptions = {
-        cwd: getCwd(),
-        prompts: {
-          chooseAgent,
-          confirmOverwrite,
-          enterTestCommand
-        },
-        stdout
-      };
-
-      await initializeProject(
-        dependencies.initFileSystem
-          ? { ...initOptions, fileSystem: dependencies.initFileSystem }
-          : initOptions
-      );
-    });
+    .action(async () => initCommand.run());
 
   return program;
 }
 
 export function registerIssueCommand(
   program: CommandInstance,
-  dependencies: CliDependencies = {}
+  issueCommand: Pick<IssueCommand, "run">
 ): CommandInstance {
   program
     .command("issue")
     .description("Start work on a GitHub issue.")
     .argument("<number>", "GitHub issue number")
-    .action(async (issueNumber: string) => {
-      const getCwd = dependencies.getCwd ?? process.cwd;
-      const stdout = dependencies.stdout ?? process.stdout;
-
-      const issueOptions = {
-        cwd: getCwd(),
-        issueNumber,
-        stdout
-      };
-
-      await runIssueCommand(
-        dependencies.readConfig
-          ? { ...issueOptions, readConfig: dependencies.readConfig }
-          : issueOptions
-      );
-    });
+    .action(async (issueNumber: string) => issueCommand.run(issueNumber));
 
   return program;
 }
 
 export async function runCli(argv: string[], dependencies: CliDependencies = {}): Promise<void> {
   await createProgram(dependencies).parseAsync(argv);
-}
-
-function defaultChooseAgent(): Promise<AgentName> {
-  return select<AgentName>({
-    message: "Choose the default agent",
-    choices: [
-      { name: "Codex", value: "codex" },
-      { name: "Claude", value: "claude" }
-    ]
-  });
-}
-
-function defaultEnterTestCommand(): Promise<string> {
-  return input({
-    message: "Enter the command used to run tests in this repository"
-  });
-}
-
-function defaultConfirmOverwrite(configDirectory: string): Promise<boolean> {
-  return confirm({
-    message: `${configDirectory} already exists. Overwrite managed files?`,
-    default: false
-  });
 }
 
 function handleCliError(error: unknown, stderr: Pick<NodeJS.WritableStream, "write">): void {
