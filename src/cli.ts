@@ -5,6 +5,8 @@ import { Command } from "commander";
 import type { Command as CommandInstance } from "commander";
 import { InitCommand } from "./commands/init.js";
 import { IssueCommand } from "./commands/issue.js";
+import { CodingFactoryConfigStore } from "./lib/config.js";
+import { IssueOrchestrator } from "./lib/issue-orchestrator.js";
 
 export interface CliDependencies {
   initCommand?: Pick<InitCommand, "run">;
@@ -15,7 +17,13 @@ export interface CliDependencies {
 export function createProgram(dependencies: CliDependencies = {}): Command {
   const program = new Command();
   const initCommand = dependencies.initCommand ?? new InitCommand();
-  const issueCommand = dependencies.issueCommand ?? new IssueCommand();
+  const issueCommand =
+    dependencies.issueCommand ??
+    new IssueCommand({
+      issueOrchestrator: new IssueOrchestrator({
+        configStore: new CodingFactoryConfigStore(),
+      }),
+    });
 
   program
     .name("coding-factory")
@@ -30,7 +38,7 @@ export function createProgram(dependencies: CliDependencies = {}): Command {
 
 export function registerInitCommand(
   program: CommandInstance,
-  initCommand: Pick<InitCommand, "run">
+  initCommand: Pick<InitCommand, "run">,
 ): CommandInstance {
   program
     .command("init")
@@ -42,7 +50,7 @@ export function registerInitCommand(
 
 export function registerIssueCommand(
   program: CommandInstance,
-  issueCommand: Pick<IssueCommand, "run">
+  issueCommand: Pick<IssueCommand, "run">,
 ): CommandInstance {
   program
     .command("issue")
@@ -53,18 +61,27 @@ export function registerIssueCommand(
   return program;
 }
 
-export async function runCli(argv: string[], dependencies: CliDependencies = {}): Promise<void> {
+export async function runCli(
+  argv: string[],
+  dependencies: CliDependencies = {},
+): Promise<void> {
   await createProgram(dependencies).parseAsync(argv);
 }
 
-function handleCliError(error: unknown, stderr: Pick<NodeJS.WritableStream, "write">): void {
+function handleCliError(
+  error: unknown,
+  stderr: Pick<NodeJS.WritableStream, "write">,
+): void {
   const message = error instanceof Error ? error.message : "Unknown error";
   stderr.write(`${message}\n`);
   process.exitCode = 1;
 }
 
 function isExecutedDirectly(): boolean {
-  return process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.argv[1];
+  return (
+    process.argv[1] !== undefined &&
+    fileURLToPath(import.meta.url) === process.argv[1]
+  );
 }
 
 if (isExecutedDirectly()) {
