@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { IssueCommand } from "../src/commands/issue.js";
+import {
+  IssueCommand,
+  type IssueCommandDependencies,
+} from "../src/commands/issue.js";
 import type { CodingFactoryConfig } from "../src/lib/config.js";
 import type { IssueOrchestrationContext } from "../src/lib/issue-orchestrator.js";
 
@@ -23,38 +26,41 @@ function getConfig(): CodingFactoryConfig {
   };
 }
 
+function createDependencies(
+  overrides: Partial<IssueCommandDependencies> = {},
+): IssueCommandDependencies {
+  return {
+    getCwd: overrides.getCwd ?? (() => "/repo"),
+    issueOrchestrator: overrides.issueOrchestrator ?? {
+      run: vi.fn(async () => getIssueOrchestrationContext()),
+    },
+  };
+}
+
 describe("IssueCommand", () => {
   it("delegates the issue run to the orchestration seam", async () => {
-    const issueOrchestrator = {
-      run: vi.fn(async () => getIssueOrchestrationContext()),
-    };
+    const dependencies = createDependencies();
 
-    await new IssueCommand({
-      getCwd: () => "/repo",
-      issueOrchestrator,
-    }).run("42");
+    await new IssueCommand(dependencies).run("42");
 
-    expect(issueOrchestrator.run).toHaveBeenCalledWith({
+    expect(dependencies.issueOrchestrator.run).toHaveBeenCalledWith({
       cwd: "/repo",
       issueNumber: "42",
     });
   });
 
   it("surfaces orchestration failures unchanged", async () => {
-    const issueOrchestrator = {
-      run: vi.fn(async () => {
-        throw new Error(
-          "Project is not initialized. Run `coding-factory init` first.",
-        );
-      }),
-    };
+    const dependencies = createDependencies({
+      issueOrchestrator: {
+        run: vi.fn(async () => {
+          throw new Error(
+            "Project is not initialized. Run `coding-factory init` first.",
+          );
+        }),
+      },
+    });
 
-    await expect(
-      new IssueCommand({
-        getCwd: () => "/repo",
-        issueOrchestrator,
-      }).run("42"),
-    ).rejects.toThrow(
+    await expect(new IssueCommand(dependencies).run("42")).rejects.toThrow(
       "Project is not initialized. Run `coding-factory init` first.",
     );
   });

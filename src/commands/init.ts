@@ -10,21 +10,20 @@ export interface InitPrompts {
 }
 
 export interface InitCommandDependencies {
-  getCwd?: () => string;
-  projectInitializer?: Pick<ProjectInitializer, "initialize" | "inspect">;
-  prompts?: InitPrompts;
-  stdout?: Pick<Writable, "write">;
+  getCwd: () => string;
+  projectInitializer: Pick<ProjectInitializer, "initialize" | "inspect">;
+  prompts: InitPrompts;
+  stdout: Pick<Writable, "write">;
 }
 
 export class InitCommand {
-  constructor(private readonly dependencies: InitCommandDependencies = {}) {}
+  constructor(private readonly dependencies: InitCommandDependencies) {}
 
   async run(): Promise<void> {
-    const cwd = (this.dependencies.getCwd ?? process.cwd)();
-    const projectInitializer =
-      this.dependencies.projectInitializer ?? new ProjectInitializer();
-    const prompts = this.dependencies.prompts ?? defaultPrompts;
-    const stdout = this.dependencies.stdout ?? process.stdout;
+    const cwd = this.dependencies.getCwd();
+    const projectInitializer = this.dependencies.projectInitializer;
+    const prompts = this.dependencies.prompts;
+    const stdout = this.dependencies.stdout;
     const inspection = await projectInitializer.inspect(cwd);
 
     if (inspection.exists) {
@@ -72,3 +71,7 @@ const defaultPrompts: InitPrompts = {
       message: "Enter the command used to run tests in this repository"
     })
 };
+
+export function createDefaultInitPrompts(): InitPrompts {
+  return defaultPrompts;
+}

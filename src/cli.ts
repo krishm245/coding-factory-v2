@@ -3,10 +3,18 @@
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import type { Command as CommandInstance } from "commander";
-import { InitCommand } from "./commands/init.js";
+import { InitCommand, createDefaultInitPrompts } from "./commands/init.js";
 import { IssueCommand } from "./commands/issue.js";
-import { CodingFactoryConfigStore } from "./lib/config.js";
+import { AgentRuntimeCatalog } from "./lib/agent-runtime.js";
+import {
+  CodingFactoryConfigStore,
+  nodeConfigFileSystem,
+} from "./lib/config.js";
 import { IssueOrchestrator } from "./lib/issue-orchestrator.js";
+import {
+  ProjectInitializer,
+  nodeProjectInitializationFileSystem,
+} from "./lib/project-initializer.js";
 
 export interface CliDependencies {
   initCommand?: Pick<InitCommand, "run">;
@@ -16,12 +24,24 @@ export interface CliDependencies {
 
 export function createProgram(dependencies: CliDependencies = {}): Command {
   const program = new Command();
-  const initCommand = dependencies.initCommand ?? new InitCommand();
+  const initCommand =
+    dependencies.initCommand ??
+    new InitCommand({
+      getCwd: process.cwd,
+      projectInitializer: new ProjectInitializer({
+        agentRuntimeCatalog: new AgentRuntimeCatalog(),
+        configStore: new CodingFactoryConfigStore(nodeConfigFileSystem),
+        fileSystem: nodeProjectInitializationFileSystem,
+      }),
+      prompts: createDefaultInitPrompts(),
+      stdout: process.stdout,
+    });
   const issueCommand =
     dependencies.issueCommand ??
     new IssueCommand({
+      getCwd: process.cwd,
       issueOrchestrator: new IssueOrchestrator({
-        configStore: new CodingFactoryConfigStore(),
+        configStore: new CodingFactoryConfigStore(nodeConfigFileSystem),
       }),
     });
 

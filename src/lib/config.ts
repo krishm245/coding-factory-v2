@@ -36,7 +36,7 @@ export class InvalidCodingFactoryConfigError extends Error {
 }
 
 export class CodingFactoryConfigStore {
-  constructor(private readonly fileSystem: ConfigFileSystem = nodeFileSystem) {}
+  constructor(private readonly fileSystem: ConfigFileSystem) {}
 
   create(
     cwd: string,
@@ -185,6 +185,6 @@ function readStringField(
   return value;
 }
 
-const nodeFileSystem: ConfigFileSystem = {
+export const nodeConfigFileSystem: ConfigFileSystem = {
   readFile: fsReadFile
 };

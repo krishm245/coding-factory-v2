@@ -32,15 +32,20 @@ export interface ProjectInitializationResult {
   paths: CodingFactoryPaths;
 }
 
+export interface ProjectInitializerDependencies {
+  agentRuntimeCatalog: Pick<
+    AgentRuntimeCatalog,
+    "buildDockerfile" | "buildEnvTemplate"
+  >;
+  configStore: Pick<CodingFactoryConfigStore, "create" | "getPaths" | "serialize">;
+  fileSystem: ProjectInitializationFileSystem;
+}
+
 export class ProjectInitializer {
-  constructor(
-    private readonly fileSystem: ProjectInitializationFileSystem = nodeFileSystem,
-    private readonly configStore: CodingFactoryConfigStore = new CodingFactoryConfigStore(),
-    private readonly agentRuntimeCatalog: AgentRuntimeCatalog = new AgentRuntimeCatalog()
-  ) {}
+  constructor(private readonly dependencies: ProjectInitializerDependencies) {}
 
   async inspect(cwd: string): Promise<ProjectInitializationInspection> {
-    const paths = this.configStore.getPaths(cwd);
+    const paths = this.dependencies.configStore.getPaths(cwd);
 
     return {
       exists: await this.directoryExists(paths.configDirectory),
@@ -57,26 +62,26 @@ export class ProjectInitializer {
       throw new Error("Test command cannot be empty.");
     }
 
-    const paths = this.configStore.getPaths(request.cwd);
-    const config = this.configStore.create(request.cwd, {
+    const paths = this.dependencies.configStore.getPaths(request.cwd);
+    const config = this.dependencies.configStore.create(request.cwd, {
       defaultAgent: request.defaultAgent,
       testCommand
     });
 
-    await this.fileSystem.mkdir(paths.configDirectory, { recursive: true });
-    await this.fileSystem.writeFile(
+    await this.dependencies.fileSystem.mkdir(paths.configDirectory, { recursive: true });
+    await this.dependencies.fileSystem.writeFile(
       paths.envPath,
-      this.agentRuntimeCatalog.buildEnvTemplate(request.defaultAgent),
+      this.dependencies.agentRuntimeCatalog.buildEnvTemplate(request.defaultAgent),
       "utf8"
     );
-    await this.fileSystem.writeFile(
+    await this.dependencies.fileSystem.writeFile(
       paths.configPath,
-      this.configStore.serialize(config),
+      this.dependencies.configStore.serialize(config),
       "utf8"
     );
-    await this.fileSystem.writeFile(
+    await this.dependencies.fileSystem.writeFile(
       paths.dockerfilePath,
-      this.agentRuntimeCatalog.buildDockerfile(request.defaultAgent),
+      this.dependencies.agentRuntimeCatalog.buildDockerfile(request.defaultAgent),
       "utf8"
     );
 
@@ -85,8 +90,8 @@ export class ProjectInitializer {
 
   private async directoryExists(directoryPath: string): Promise<boolean> {
     try {
-      await this.fileSystem.access(directoryPath);
-      await this.fileSystem.readdir(directoryPath);
+      await this.dependencies.fileSystem.access(directoryPath);
+      await this.dependencies.fileSystem.readdir(directoryPath);
       return true;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -98,7 +103,7 @@ export class ProjectInitializer {
   }
 }
 
-const nodeFileSystem: ProjectInitializationFileSystem = {
+export const nodeProjectInitializationFileSystem: ProjectInitializationFileSystem = {
   access: fsAccess,
   mkdir: fsMkdir,
   readdir: fsReaddir,
