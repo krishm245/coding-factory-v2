@@ -2,6 +2,8 @@ import {
   CodingFactoryConfigStore,
   type CodingFactoryConfig,
 } from "./config.js";
+import { DockerWorkerService } from "./docker-worker-service.js";
+import { IssueWorkflowRunner } from "./issue-workflow-runner.js";
 import { RepoPreparationService } from "./repo-preparation-service.js";
 
 export interface IssueOrchestrationRequest {
@@ -18,6 +20,11 @@ export interface IssueOrchestrationContext {
 
 export interface IssueOrchestratorDependencies {
   configStore: Pick<CodingFactoryConfigStore, "load">;
+  dockerWorkerService: Pick<
+    DockerWorkerService,
+    "cleanupWorker" | "startWorker"
+  >;
+  issueWorkflowRunner: Pick<IssueWorkflowRunner, "run">;
   repoPreparationService: Pick<RepoPreparationService, "prepareIssueBranch">;
 }
 
@@ -54,11 +61,32 @@ export class IssueOrchestrator {
       branchName,
     });
 
-    return {
+    const context = {
       ...preparedRequest,
       branchName,
       config,
     };
+
+    const worker = await this.dependencies.dockerWorkerService.startWorker({
+      cwd: preparedRequest.cwd,
+      dockerfilePath: config.dockerfilePath,
+      imageName: config.imageName,
+      issueNumber: preparedRequest.issueNumber,
+    });
+
+    try {
+      await this.dependencies.issueWorkflowRunner.run({
+        ...context,
+        worker,
+      });
+    } catch (error) {
+      await this.cleanupWorker(worker, error);
+      throw error;
+    }
+
+    await this.cleanupWorker(worker);
+
+    return context;
   }
 
   private prepare(
@@ -79,4 +107,39 @@ export class IssueOrchestrator {
   private buildBranchName(branchPrefix: string, issueNumber: number): string {
     return `${branchPrefix}/issue-${issueNumber}`;
   }
+
+  private async cleanupWorker(
+    worker: Awaited<
+      ReturnType<
+        IssueOrchestratorDependencies["dockerWorkerService"]["startWorker"]
+      >
+    >,
+    error?: unknown,
+  ): Promise<void> {
+    try {
+      await this.dependencies.dockerWorkerService.cleanupWorker(worker);
+    } catch (cleanupError) {
+      if (error === undefined) {
+        throw cleanupError;
+      }
+
+      throw this.createWorkflowCleanupError(error, cleanupError);
+    }
+  }
+
+  private createWorkflowCleanupError(
+    error: unknown,
+    cleanupError: unknown,
+  ): Error {
+    const workflowError = ensureError(error);
+    const dockerCleanupError = ensureError(cleanupError);
+
+    return new Error(
+      `${workflowError.message} Cleanup also failed: ${dockerCleanupError.message}`,
+    );
+  }
+}
+
+function ensureError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
 }

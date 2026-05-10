@@ -28,7 +28,7 @@ Build `coding-factory issue <number>` into an end-to-end workflow that:
 
 ## Milestones
 
-### [x] Milestone 1: Issue Command Foundation
+### [X] Milestone 1: Issue Command Foundation
 
 Goal: Replace the placeholder `issue` command with a real orchestration entrypoint that follows the repo's DI pattern.
 
@@ -47,7 +47,7 @@ Acceptance criteria:
 
 Depends on: none
 
-### [ ] Milestone 2: Repo Validation and Branch Lifecycle
+### [X] Milestone 2: Repo Validation and Branch Lifecycle
 
 Goal: Validate the repo before work starts and create the issue branch early.
 
@@ -66,7 +66,7 @@ Acceptance criteria:
 
 Depends on: Milestone 1
 
-### [ ] Milestone 3: Docker Worker Lifecycle
+### [X] Milestone 3: Docker Worker Lifecycle
 
 Goal: Run the full workflow inside one long-lived Docker worker container.
 
