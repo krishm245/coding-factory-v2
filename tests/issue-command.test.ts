@@ -8,6 +8,7 @@ import type { IssueOrchestrationContext } from "../src/lib/issue-orchestrator.js
 
 function getIssueOrchestrationContext(): IssueOrchestrationContext {
   return {
+    branchName: "coding-factory/issue-42",
     cwd: "/repo",
     issueNumber: 42,
     config: getConfig(),

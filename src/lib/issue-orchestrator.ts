@@ -2,6 +2,7 @@ import {
   CodingFactoryConfigStore,
   type CodingFactoryConfig,
 } from "./config.js";
+import { RepoPreparationService } from "./repo-preparation-service.js";
 
 export interface IssueOrchestrationRequest {
   cwd: string;
@@ -9,6 +10,7 @@ export interface IssueOrchestrationRequest {
 }
 
 export interface IssueOrchestrationContext {
+  branchName: string;
   cwd: string;
   config: CodingFactoryConfig;
   issueNumber: number;
@@ -16,10 +18,15 @@ export interface IssueOrchestrationContext {
 
 export interface IssueOrchestratorDependencies {
   configStore: Pick<CodingFactoryConfigStore, "load">;
+  repoPreparationService: Pick<RepoPreparationService, "prepareIssueBranch">;
+}
+
+interface PreparedIssueOrchestrationRequest {
+  cwd: string;
+  issueNumber: number;
 }
 
 export class IssueOrchestrator {
-  private issueOrchestratorContext: IssueOrchestrationContext | null = null;
   constructor(private readonly dependencies: IssueOrchestratorDependencies) {}
 
   async run(
@@ -37,18 +44,26 @@ export class IssueOrchestrator {
       );
     }
 
-    this.createIssueOrchestrationContextWithConfig(preparedRequest, config);
+    const branchName = this.buildBranchName(
+      config.branchPrefix,
+      preparedRequest.issueNumber,
+    );
 
-    if (!this.issueOrchestratorContext) {
-      throw new Error("Issue orchestrator context is not initialized.");
-    }
+    await this.dependencies.repoPreparationService.prepareIssueBranch({
+      cwd: preparedRequest.cwd,
+      branchName,
+    });
 
-    return this.issueOrchestratorContext;
+    return {
+      ...preparedRequest,
+      branchName,
+      config,
+    };
   }
 
   private prepare(
     request: IssueOrchestrationRequest,
-  ): Omit<IssueOrchestrationContext, "config"> {
+  ): PreparedIssueOrchestrationRequest {
     const issueNumber = Number.parseInt(request.issueNumber, 10);
 
     if (!Number.isInteger(issueNumber) || issueNumber <= 0) {
@@ -61,13 +76,7 @@ export class IssueOrchestrator {
     };
   }
 
-  private createIssueOrchestrationContextWithConfig(
-    preparedRequest: Omit<IssueOrchestrationContext, "config">,
-    config: CodingFactoryConfig,
-  ) {
-    this.issueOrchestratorContext = {
-      ...preparedRequest,
-      config,
-    };
+  private buildBranchName(branchPrefix: string, issueNumber: number): string {
+    return `${branchPrefix}/issue-${issueNumber}`;
   }
 }

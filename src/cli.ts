@@ -6,15 +6,18 @@ import type { Command as CommandInstance } from "commander";
 import { InitCommand, createDefaultInitPrompts } from "./commands/init.js";
 import { IssueCommand } from "./commands/issue.js";
 import { AgentRuntimeCatalog } from "./lib/agent-runtime.js";
+import { NodeCommandRunner } from "./lib/command-runner.js";
 import {
   CodingFactoryConfigStore,
   nodeConfigFileSystem,
 } from "./lib/config.js";
+import { GitRepository } from "./lib/git-repository.js";
 import { IssueOrchestrator } from "./lib/issue-orchestrator.js";
 import {
   ProjectInitializer,
   nodeProjectInitializationFileSystem,
 } from "./lib/project-initializer.js";
+import { RepoPreparationService } from "./lib/repo-preparation-service.js";
 
 export interface CliDependencies {
   initCommand?: Pick<InitCommand, "run">;
@@ -24,26 +27,9 @@ export interface CliDependencies {
 
 export function createProgram(dependencies: CliDependencies = {}): Command {
   const program = new Command();
-  const initCommand =
-    dependencies.initCommand ??
-    new InitCommand({
-      getCwd: process.cwd,
-      projectInitializer: new ProjectInitializer({
-        agentRuntimeCatalog: new AgentRuntimeCatalog(),
-        configStore: new CodingFactoryConfigStore(nodeConfigFileSystem),
-        fileSystem: nodeProjectInitializationFileSystem,
-      }),
-      prompts: createDefaultInitPrompts(),
-      stdout: process.stdout,
-    });
-  const issueCommand =
-    dependencies.issueCommand ??
-    new IssueCommand({
-      getCwd: process.cwd,
-      issueOrchestrator: new IssueOrchestrator({
-        configStore: new CodingFactoryConfigStore(nodeConfigFileSystem),
-      }),
-    });
+
+  const initCommand = dependencies.initCommand ?? buildInitCommand();
+  const issueCommand = dependencies.issueCommand ?? buildIssueCommand();
 
   program
     .name("coding-factory")
@@ -54,6 +40,33 @@ export function createProgram(dependencies: CliDependencies = {}): Command {
   registerIssueCommand(program, issueCommand);
 
   return program;
+}
+
+function buildInitCommand() {
+  return new InitCommand({
+    getCwd: process.cwd,
+    projectInitializer: new ProjectInitializer({
+      agentRuntimeCatalog: new AgentRuntimeCatalog(),
+      configStore: new CodingFactoryConfigStore(nodeConfigFileSystem),
+      fileSystem: nodeProjectInitializationFileSystem,
+    }),
+    prompts: createDefaultInitPrompts(),
+    stdout: process.stdout,
+  });
+}
+
+function buildIssueCommand() {
+  return new IssueCommand({
+    getCwd: process.cwd,
+    issueOrchestrator: new IssueOrchestrator({
+      configStore: new CodingFactoryConfigStore(nodeConfigFileSystem),
+      repoPreparationService: new RepoPreparationService({
+        gitRepository: new GitRepository({
+          commandRunner: new NodeCommandRunner(),
+        }),
+      }),
+    }),
+  });
 }
 
 export function registerInitCommand(

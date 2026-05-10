@@ -28,17 +28,19 @@ Build `coding-factory issue <number>` into an end-to-end workflow that:
 
 ## Milestones
 
-### [ ] Milestone 1: Issue Command Foundation
+### [x] Milestone 1: Issue Command Foundation
 
 Goal: Replace the placeholder `issue` command with a real orchestration entrypoint that follows the repo's DI pattern.
 
 Implementation:
+
 - Add a top-level issue orchestration class and dependency bag.
 - Keep `src/cli.ts` as the production composition root.
 - Move orchestration wiring behind injectable command dependencies.
 - Keep validation and data-shaping logic separate from side effects where practical.
 
 Acceptance criteria:
+
 - `coding-factory issue <number>` enters a real orchestration flow instead of printing a placeholder message.
 - CLI tests build the program with fake dependencies and run `parseAsync(...)`.
 - The orchestration path is testable without Docker, git, GitHub, or filesystem side effects.
@@ -50,12 +52,14 @@ Depends on: none
 Goal: Validate the repo before work starts and create the issue branch early.
 
 Implementation:
+
 - Add git services for checking repo cleanliness and creating branches.
 - Abort immediately if the working tree is dirty.
 - Create `coding-factory/issue-<number>` before generating the requirements file or implementation changes.
 - Use the configured branch prefix when constructing the branch name.
 
 Acceptance criteria:
+
 - Dirty repos fail before Docker or GitHub work starts.
 - Clean repos create the local issue branch early.
 - Tests assert that downstream steps are skipped when repo validation fails.
@@ -67,12 +71,14 @@ Depends on: Milestone 1
 Goal: Run the full workflow inside one long-lived Docker worker container.
 
 Implementation:
+
 - Add Docker service classes for starting, stopping, and removing the worker container.
 - Mount the repo into the container.
 - Use the configured Dockerfile path / image configuration to ensure the agent CLI and GitHub CLI are available.
 - Guarantee cleanup on success, failure, and timeout.
 
 Acceptance criteria:
+
 - Exactly one worker container is started for an issue run.
 - The container is always stopped and removed at the end.
 - Tests assert cleanup is attempted on both success and failure paths.
@@ -84,12 +90,14 @@ Depends on: Milestone 2
 Goal: Fetch the GitHub issue title and body for the requested issue number.
 
 Implementation:
+
 - Add GitHub integration for issue lookup.
 - Authenticate from inside the container using the token available through `.coding-factory/.env`.
 - Fetch issue title and body only in v1.
 - Surface clear failures for missing credentials, missing issue data, or GitHub command errors.
 
 Acceptance criteria:
+
 - A valid issue number returns title and body.
 - Comments are not fetched in v1.
 - Tests cover success, missing token, and fetch failure behavior.
@@ -101,12 +109,14 @@ Depends on: Milestone 3
 Goal: Create a normalized markdown requirements brief from the GitHub issue.
 
 Implementation:
+
 - Generate a structured markdown document with sections such as summary, acceptance criteria, assumptions, and implementation notes.
 - Write the file under the configured `requirementsDocPath`.
 - Use the deterministic filename `issue-<number>.md`.
 - Treat the generated brief as part of the issue branch contents.
 
 Acceptance criteria:
+
 - The requirements file is created at the expected path.
 - The content is deterministic for the same issue input.
 - Tests assert path, filename, and generated content shape.
@@ -118,12 +128,14 @@ Depends on: Milestone 4
 Goal: Invoke the selected agent CLI once with one composed implementation prompt.
 
 Implementation:
+
 - Add an agent runner service.
 - Build one orchestrated prompt that includes the requirements file path, the branch goal, and the configured test command.
 - Instruct the agent to implement the issue and run/fix tests until green or timeout.
 - Keep agent invocation injectable for tests.
 
 Acceptance criteria:
+
 - The orchestration invokes the selected agent exactly once.
 - The prompt includes the requirements file path and test command.
 - Tests assert exact invocation arguments.
@@ -135,12 +147,14 @@ Depends on: Milestone 5
 Goal: Define what counts as success or failure for the end-to-end issue run.
 
 Implementation:
+
 - Enforce a global timeout for the full issue workflow.
 - Treat passing tests as the success condition.
 - Treat timeout or unrecoverable agent/test failure as command failure.
 - Ensure failure paths still run container cleanup and do not push a branch.
 
 Acceptance criteria:
+
 - Passing tests allow the flow to continue to commit/push.
 - Timeout aborts the run cleanly.
 - Tests assert push is skipped on failure and cleanup still occurs.
@@ -152,12 +166,14 @@ Depends on: Milestone 6
 Goal: Publish successful work to GitHub in a deterministic way.
 
 Implementation:
+
 - Create one final commit after the workflow reaches a green test state.
 - Use the GitHub issue title as the commit message.
 - Push `coding-factory/issue-<number>` from inside the container using token-based auth.
 - Never push automatically on failure.
 
 Acceptance criteria:
+
 - Successful runs create one final commit and push the expected branch.
 - Failed runs do not push.
 - Tests assert commit message, branch name, and push sequencing.
@@ -169,11 +185,13 @@ Depends on: Milestone 7
 Goal: Make the workflow observable without relying on persistent run logs.
 
 Implementation:
+
 - Emit progress output for validation, branch creation, container startup, issue fetch, requirements generation, agent execution, commit, push, and cleanup.
 - Keep output deterministic enough for CLI tests.
 - Keep persistent failure artifacts limited to the generated requirements markdown in v1.
 
 Acceptance criteria:
+
 - Users can tell which stage is running and where failures occurred.
 - Tests assert the key progress messages and their order.
 
