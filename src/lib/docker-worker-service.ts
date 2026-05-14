@@ -1,5 +1,6 @@
 import path from "node:path";
 import { NodeCommandRunner, type CommandRunResult } from "./command-runner.js";
+import { CONFIG_DIRECTORY, ENV_FILE } from "./config.js";
 
 const WORKSPACE_PATH = "/workspace";
 const IDLE_COMMAND = ["tail", "-f", "/dev/null"] as const;
@@ -18,6 +19,11 @@ export interface DockerWorkerHandle {
   workspacePath: string;
 }
 
+export interface DockerWorkerCommandRequest {
+  args: readonly string[];
+  command: string;
+}
+
 export interface DockerWorkerServiceDependencies {
   commandRunner: Pick<NodeCommandRunner, "run">;
 }
@@ -29,6 +35,11 @@ export class DockerWorkerService {
     request: DockerWorkerStartRequest,
   ): Promise<DockerWorkerHandle> {
     const dockerfilePath = path.resolve(request.cwd, request.dockerfilePath);
+    const envFilePath = path.resolve(
+      request.cwd,
+      CONFIG_DIRECTORY,
+      ENV_FILE,
+    );
     const containerName = this.buildContainerName(
       request.imageName,
       request.issueNumber,
@@ -40,7 +51,12 @@ export class DockerWorkerService {
     let containerCreated = false;
 
     try {
-      await this.createContainer(request.cwd, request.imageName, containerName);
+      await this.createContainer(
+        request.cwd,
+        request.imageName,
+        containerName,
+        envFilePath,
+      );
       containerCreated = true;
       await this.startContainer(request.cwd, containerName);
     } catch (error) {
@@ -67,6 +83,20 @@ export class DockerWorkerService {
       imageName: request.imageName,
       workspacePath: WORKSPACE_PATH,
     };
+  }
+
+  async runCommandInWorker(
+    handle: DockerWorkerHandle,
+    request: DockerWorkerCommandRequest,
+  ): Promise<CommandRunResult> {
+    return this.runDocker(handle.cwd, [
+      "exec",
+      "--workdir",
+      handle.workspacePath,
+      handle.containerName,
+      request.command,
+      ...request.args,
+    ]);
   }
 
   async cleanupWorker(handle: DockerWorkerHandle): Promise<void> {
@@ -170,11 +200,14 @@ export class DockerWorkerService {
     cwd: string,
     imageName: string,
     containerName: string,
+    envFilePath: string,
   ): Promise<void> {
     const result = await this.runDocker(cwd, [
       "create",
       "--name",
       containerName,
+      "--env-file",
+      envFilePath,
       "--volume",
       `${cwd}:${WORKSPACE_PATH}`,
       "--workdir",

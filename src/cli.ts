@@ -13,6 +13,7 @@ import {
 } from "./lib/config.js";
 import { DockerWorkerService } from "./lib/docker-worker-service.js";
 import { GitRepository } from "./lib/git-repository.js";
+import { GitHubIssueService } from "./lib/github-issue-service.js";
 import { IssueOrchestrator } from "./lib/issue-orchestrator.js";
 import { IssueWorkflowRunner } from "./lib/issue-workflow-runner.js";
 import {
@@ -59,15 +60,20 @@ function buildInitCommand() {
 
 function buildIssueCommand() {
   const commandRunner = new NodeCommandRunner();
+  const dockerWorkerService = new DockerWorkerService({
+    commandRunner,
+  });
 
   return new IssueCommand({
     getCwd: process.cwd,
     issueOrchestrator: new IssueOrchestrator({
       configStore: new CodingFactoryConfigStore(nodeConfigFileSystem),
-      dockerWorkerService: new DockerWorkerService({
-        commandRunner,
+      dockerWorkerService,
+      issueWorkflowRunner: new IssueWorkflowRunner({
+        gitHubIssueService: new GitHubIssueService({
+          dockerWorkerService,
+        }),
       }),
-      issueWorkflowRunner: new IssueWorkflowRunner(),
       repoPreparationService: new RepoPreparationService({
         gitRepository: new GitRepository({
           commandRunner,

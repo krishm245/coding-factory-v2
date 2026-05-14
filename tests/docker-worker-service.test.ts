@@ -97,6 +97,8 @@ describe("DockerWorkerService", () => {
         "create",
         "--name",
         "coding-factory-repo-issue-42",
+        "--env-file",
+        "/repo/.coding-factory/.env",
         "--volume",
         "/repo:/workspace",
         "--workdir",
@@ -198,6 +200,43 @@ describe("DockerWorkerService", () => {
       2,
       "docker",
       ["rm", "coding-factory-repo-issue-42"],
+      { cwd: "/repo" },
+    );
+  });
+
+  it("runs commands inside the started worker container", async () => {
+    const commandRunner = createCommandRunner([createResult({ stdout: "{}\n" })]);
+    const service = new DockerWorkerService({ commandRunner });
+
+    await expect(
+      service.runCommandInWorker(
+        {
+          containerName: "coding-factory-repo-issue-42",
+          cwd: "/repo",
+          imageName: "coding-factory-repo",
+          workspacePath: "/workspace",
+        },
+        {
+          command: "gh",
+          args: ["issue", "view", "42", "--json", "title,body"],
+        },
+      ),
+    ).resolves.toEqual(createResult({ stdout: "{}\n" }));
+
+    expect(commandRunner.run).toHaveBeenCalledWith(
+      "docker",
+      [
+        "exec",
+        "--workdir",
+        "/workspace",
+        "coding-factory-repo-issue-42",
+        "gh",
+        "issue",
+        "view",
+        "42",
+        "--json",
+        "title,body",
+      ],
       { cwd: "/repo" },
     );
   });
